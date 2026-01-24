@@ -1,7 +1,6 @@
 # main.py
 from fastapi import FastAPI
 import sqlite3
-import os
 
 app = FastAPI()
 

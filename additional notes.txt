@@ -10,3 +10,5 @@ why is there a skip measurements option.
 the length of measurement box is short.
 
 change the search option with fields like name, contact, measurements, order
+
+question: when i add information

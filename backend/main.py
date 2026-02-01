@@ -1,5 +1,5 @@
 # main.py
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 import sqlite3
 from pydantic import BaseModel
 from typing import Optional
@@ -115,7 +115,7 @@ def init_database():
         CREATE TABLE IF NOT EXISTS CUSTOMER (
             customer_id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
-            phone_number TEXT NOT NULL UNIQUE,
+            phone_number TEXT NOT NULL,
             address TEXT,
             notes TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -192,6 +192,7 @@ def test_database():
 
 @app.get("/customers/", response_model=list[CustomerResponse])
 def get_all_customers():
+    """Get all customers - matches frontend API.customers.getAll()"""
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM CUSTOMER ORDER BY customer_id DESC')
@@ -206,6 +207,27 @@ def get_all_customers():
         "notes": row[4],
         "created_at": row[5]
     } for row in rows]
+
+@app.get("/customers/{customer_id}", response_model=CustomerResponse)
+def get_customer(customer_id: int):
+    """Get single customer by ID - matches frontend API.customers.getById()"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM CUSTOMER WHERE customer_id = ?', (customer_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    return {
+        "customer_id": row[0],
+        "name": row[1],
+        "phone_number": row[2],
+        "address": row[3],
+        "notes": row[4],
+        "created_at": row[5]
+    }
 
 @app.put("/customers/{customer_id}", response_model=CustomerResponse)
 def update_customer(customer_id: int, customer: CustomerUpdate):
@@ -324,8 +346,55 @@ def get_measurement(measurement_id: int):
 
 @app.put("/measurements/{measurement_id}", response_model=MeasurementResponse)
 def update_measurement(measurement_id: int, measurement: MeasurementUpdate):
-    # Similar update logic as customer
-    pass  # Implement similar to customer update
+    """Update measurement - matches frontend API.measurements.update()"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+
+    # Check measurement exists
+    cursor.execute('SELECT * FROM MEASUREMENT WHERE measurement_id = ?', (measurement_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Measurement not found")
+
+    # Build dynamic update query
+    updates = []
+    values = []
+    for field, value in measurement.dict(exclude_unset=True).items():
+        updates.append(f"{field} = ?")
+        values.append(value)
+
+    values.append(measurement_id)
+    query = f"UPDATE MEASUREMENT SET {', '.join(updates)} WHERE measurement_id = ?"
+    cursor.execute(query, values)
+    conn.commit()
+
+    # Get updated measurement
+    cursor.execute('SELECT * FROM MEASUREMENT WHERE measurement_id = ?', (measurement_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return {
+        "measurement_id": row[0],
+        "customer_id": row[1],
+        "measurement_date": row[2],
+        "garment_type": row[3],
+        "chest": row[4],
+        "waist": row[5],
+        "length": row[6],
+        "shoulder": row[7],
+        "arm_length": row[8],
+        "arm_opening": row[9],
+        "neck": row[10],
+        "shalwar_length": row[11],
+        "shalwar_bottom": row[12],
+        "kamee_length": row[13],
+        "hip": row[14],
+        "kurta_length": row[15],
+        "attribute": row[16],
+        "pajama_length": row[17],
+        "pajama_bottom": row[18]
+    }
 
 @app.delete("/measurements/{measurement_id}")
 def delete_measurement(measurement_id: int):
@@ -364,10 +433,91 @@ def get_all_orders():
         "garment_type": row[11]
     } for row in rows]
 
+
+@app.get("/orders/{order_id}", response_model=OrderResponse)
+def get_order(order_id: int):
+    """Get single order by ID - matches frontend API.orders.getById()"""
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT * FROM "ORDER" WHERE order_id = ?', (order_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    return {
+        "order_id": row[0],
+        "customer_id": row[1],
+        "measurement_id": row[2],
+        "order_date": row[3],
+        "delivery_date": row[4],
+        "total_amount": row[5],
+        "advance_payment": row[6],
+        "discount": row[7],
+        "status": row[8],
+        "balance_due": row[9],
+        "notes": row[10],
+        "garment_type": row[11]
+    }
+
+
 @app.put("/orders/{order_id}", response_model=OrderResponse)
 def update_order(order_id: int, order: OrderUpdate):
-    # Similar update logic
-    pass  # Implement similar to customer update
+    """Update order - matches frontend API.orders.update()"""
+    valid_statuses = ('order-book', 'cutting', 'stitching', 'ready-to-deliver', 'delivered')
+    if order.status is not None and order.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    if order.total_amount is not None and order.total_amount < 0:
+        raise HTTPException(status_code=400, detail="Total amount cannot be negative")
+    if order.advance_payment is not None and order.advance_payment < 0:
+        raise HTTPException(status_code=400, detail="Advance payment cannot be negative")
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+
+    # Check order exists
+    cursor.execute('SELECT * FROM "ORDER" WHERE order_id = ?', (order_id,))
+    row = cursor.fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Build dynamic update query
+    updates = []
+    values = []
+    for field, value in order.dict(exclude_unset=True).items():
+        if value is not None:
+            updates.append(f"{field} = ?")
+            values.append(value)
+
+    if not updates:
+        conn.close()
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    values.append(order_id)
+    query = f'UPDATE "ORDER" SET {", ".join(updates)} WHERE order_id = ?'
+    cursor.execute(query, values)
+    conn.commit()
+
+    # Get updated order
+    cursor.execute('SELECT * FROM "ORDER" WHERE order_id = ?', (order_id,))
+    row = cursor.fetchone()
+    conn.close()
+
+    return {
+        "order_id": row[0],
+        "customer_id": row[1],
+        "measurement_id": row[2],
+        "order_date": row[3],
+        "delivery_date": row[4],
+        "total_amount": row[5],
+        "advance_payment": row[6],
+        "discount": row[7],
+        "status": row[8],
+        "balance_due": row[9],
+        "notes": row[10],
+        "garment_type": row[11]
+    }
 
 @app.delete("/orders/{order_id}")
 def delete_order(order_id: int):
@@ -493,58 +643,136 @@ def search_by_garment_type(garment_type: str):
         ]
     }
 
-# 4. Search by Date
+# search by date
 @app.get("/search/date/")
-def search_by_date(from_date: date, to_date: date):
+def search_by_date(
+    date_str: str = Query(..., description="Date to search for (YYYY-MM-DD)")
+):
+    """Search by order date - returns customers who have orders on this date with all their data"""
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     
-    # Get orders in date range
-    cursor.execute('''
-        SELECT * FROM "ORDER" 
-        WHERE order_date BETWEEN ? AND ?
-        ORDER BY order_date
-    ''', (from_date, to_date))
-    orders = cursor.fetchall()
-    
-    conn.close()
-    
-    if not orders:
-        return {"message": "No orders found in this date range"}
-    
-    return {
-        "orders": [
-            {
-                "id": o[0],
-                "customer_id": o[1],
-                "status": o[8],
-                "order_date": o[3],
-                "delivery_date": o[4],
-                "total_amount": o[5]
-            } for o in orders
-        ]
-    }
-
+    try:
+        search_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        
+        # Get orders on this date
+        cursor.execute('SELECT * FROM "ORDER" WHERE order_date = ? ORDER BY order_id DESC', (search_date,))
+        orders = cursor.fetchall()
+        
+        if not orders:
+            conn.close()
+            return {"message": f"No orders found on date {search_date}"}
+        
+        # Get unique customer IDs from these orders
+        customer_ids = list(set([order[1] for order in orders]))
+        
+        result = []
+        for customer_id in customer_ids:
+            # Get customer details
+            cursor.execute('SELECT * FROM CUSTOMER WHERE customer_id = ?', (customer_id,))
+            customer = cursor.fetchone()
+            
+            if customer:
+                # Get customer's measurements
+                cursor.execute('SELECT * FROM MEASUREMENT WHERE customer_id = ?', (customer_id,))
+                measurements = cursor.fetchall()
+                
+                # Get customer's orders (all orders, not just the date searched)
+                cursor.execute('SELECT * FROM "ORDER" WHERE customer_id = ? ORDER BY order_id DESC', (customer_id,))
+                all_orders = cursor.fetchall()
+                
+                result.append({
+                    "customer": {
+                        "customer_id": customer[0],
+                        "name": customer[1],
+                        "phone_number": customer[2],
+                        "address": customer[3],
+                        "notes": customer[4],
+                        "created_at": customer[5]
+                    },
+                    "measurements": [
+                        {
+                            "measurement_id": m[0],
+                            "customer_id": m[1],
+                            "measurement_date": m[2],
+                            "garment_type": m[3],
+                            "chest": m[4],
+                            "waist": m[5],
+                            "length": m[6],
+                            "shoulder": m[7],
+                            "arm_length": m[8],
+                            "arm_opening": m[9],
+                            "neck": m[10],
+                            "shalwar_length": m[11],
+                            "shalwar_bottom": m[12],
+                            "kamee_length": m[13],
+                            "hip": m[14],
+                            "kurta_length": m[15],
+                            "attribute": m[16],
+                            "pajama_length": m[17],
+                            "pajama_bottom": m[18]
+                        } for m in measurements
+                    ],
+                    "orders": [
+                        {
+                            "order_id": o[0],
+                            "customer_id": o[1],
+                            "measurement_id": o[2],
+                            "order_date": o[3],
+                            "delivery_date": o[4],
+                            "total_amount": o[5],
+                            "advance_payment": o[6],
+                            "discount": o[7],
+                            "status": o[8],
+                            "balance_due": o[9],
+                            "notes": o[10],
+                            "garment_type": o[11]
+                        } for o in all_orders
+                    ]
+                })
+        
+        conn.close()
+        return {"customers": result}
+        
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+# add customer
 @app.post("/customers/", response_model=CustomerResponse)
 def create_customer(customer: CustomerCreate):
+    """Create customer - allows duplicate phone numbers"""
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
+    
+    # Removed duplicate phone check - customers can have same phone numbers
     cursor.execute('''
         INSERT INTO CUSTOMER (name, phone_number, address, notes)
         VALUES (?, ?, ?, ?)
     ''', (customer.name, customer.phone_number, customer.address, customer.notes))
+    
     conn.commit()
     customer_id = cursor.lastrowid
+    
+    # Fetch the created customer with created_at timestamp
+    cursor.execute('SELECT * FROM CUSTOMER WHERE customer_id = ?', (customer_id,))
+    row = cursor.fetchone()
     conn.close()
     
     return {
-        "customer_id": customer_id,
-        **customer.dict(),
-        "created_at": datetime.now()
+        "customer_id": row[0],
+        "name": row[1],
+        "phone_number": row[2],
+        "address": row[3],
+        "notes": row[4],
+        "created_at": row[5]  # Get actual timestamp from database
     }
 
+# add measurement
 @app.post("/measurements/", response_model=MeasurementResponse)
 def create_measurement(measurement: MeasurementCreate):
+    """Create measurement - matches frontend API.measurements.create()"""
+    valid_garment_types = ('2-piece', '3-piece', 'prince-coat', 'shirt', 'pants', 'coat')
+    if measurement.garment_type not in valid_garment_types:
+        raise HTTPException(status_code=400, detail=f"Invalid garment_type. Must be one of: {', '.join(valid_garment_types)}")
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     cursor.execute('''
@@ -570,8 +798,20 @@ def create_measurement(measurement: MeasurementCreate):
         **measurement.dict()
     }
 
+# add order
 @app.post("/orders/", response_model=OrderResponse)
 def create_order(order: OrderCreate):
+    """Create order - matches frontend API.orders.create()"""
+    valid_garment_types = ('2-piece', '3-piece', 'prince-coat', 'shirt', 'pants', 'coat')
+    valid_statuses = ('order-book', 'cutting', 'stitching', 'ready-to-deliver', 'delivered')
+    if order.garment_type not in valid_garment_types:
+        raise HTTPException(status_code=400, detail=f"Invalid garment_type. Must be one of: {', '.join(valid_garment_types)}")
+    if order.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    if order.total_amount < 0:
+        raise HTTPException(status_code=400, detail="Total amount cannot be negative")
+    if order.advance_payment < 0:
+        raise HTTPException(status_code=400, detail="Advance payment cannot be negative")
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     cursor.execute('''

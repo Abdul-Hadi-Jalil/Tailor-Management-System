@@ -1,15 +1,24 @@
 # main.py
 from fastapi import FastAPI, HTTPException
 import sqlite3
-
-app = FastAPI()
-
-# Database initialization
-DATABASE_NAME = "tailorshop.db"
-
 from pydantic import BaseModel
 from typing import Optional
 from datetime import date, datetime
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI()
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods including OPTIONS
+    allow_headers=["*"],
+)
+
+# Database initialization
+DATABASE_NAME = "tailorshop.db"
 
 # Pydantic Models
 class CustomerCreate(BaseModel):
@@ -426,6 +435,7 @@ def search_by_phone(phone_number: str):
 # 2. Search by Name
 @app.get("/search/name/{customer_name}")
 def search_by_name(customer_name: str):
+    conn = None
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     
@@ -451,6 +461,7 @@ def search_by_name(customer_name: str):
 # 3. Search by Garment Type
 @app.get("/search/garment/{garment_type}")
 def search_by_garment_type(garment_type: str):
+    conn = None
     conn = sqlite3.connect(DATABASE_NAME)
     cursor = conn.cursor()
     
@@ -512,4 +523,73 @@ def search_by_date(from_date: date, to_date: date):
                 "total_amount": o[5]
             } for o in orders
         ]
+    }
+
+@app.post("/customers/", response_model=CustomerResponse)
+def create_customer(customer: CustomerCreate):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO CUSTOMER (name, phone_number, address, notes)
+        VALUES (?, ?, ?, ?)
+    ''', (customer.name, customer.phone_number, customer.address, customer.notes))
+    conn.commit()
+    customer_id = cursor.lastrowid
+    conn.close()
+    
+    return {
+        "customer_id": customer_id,
+        **customer.dict(),
+        "created_at": datetime.now()
+    }
+
+@app.post("/measurements/", response_model=MeasurementResponse)
+def create_measurement(measurement: MeasurementCreate):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO MEASUREMENT 
+        (customer_id, measurement_date, garment_type, chest, waist, length, 
+         shoulder, arm_length, arm_opening, neck, shalwar_length, shalwar_bottom, 
+         kamee_length, hip, kurta_length, attribute, pajama_length, pajama_bottom)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        measurement.customer_id, measurement.measurement_date, measurement.garment_type,
+        measurement.chest, measurement.waist, measurement.length,
+        measurement.shoulder, measurement.arm_length, measurement.arm_opening,
+        measurement.neck, measurement.shalwar_length, measurement.shalwar_bottom,
+        measurement.kamee_length, measurement.hip, measurement.kurta_length,
+        measurement.attribute, measurement.pajama_length, measurement.pajama_bottom
+    ))
+    conn.commit()
+    measurement_id = cursor.lastrowid
+    conn.close()
+    
+    return {
+        "measurement_id": measurement_id,
+        **measurement.dict()
+    }
+
+@app.post("/orders/", response_model=OrderResponse)
+def create_order(order: OrderCreate):
+    conn = sqlite3.connect(DATABASE_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO "ORDER" 
+        (customer_id, measurement_id, order_date, delivery_date, total_amount, 
+         advance_payment, discount, status, notes, garment_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (
+        order.customer_id, order.measurement_id, order.order_date,
+        order.delivery_date, order.total_amount, order.advance_payment,
+        order.discount, order.status, order.notes, order.garment_type
+    ))
+    conn.commit()
+    order_id = cursor.lastrowid
+    conn.close()
+    
+    return {
+        "order_id": order_id,
+        **order.dict(),
+        "balance_due": order.total_amount - order.advance_payment - order.discount
     }

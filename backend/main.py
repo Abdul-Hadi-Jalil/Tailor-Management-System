@@ -1,15 +1,14 @@
 # main.py
 from fastapi import FastAPI, HTTPException
 import sqlite3
+from pydantic import BaseModel
+from typing import Optional
+from datetime import date, datetime
 
 app = FastAPI()
 
 # Database initialization
 DATABASE_NAME = "tailorshop.db"
-
-from pydantic import BaseModel
-from typing import Optional
-from datetime import date, datetime
 
 # Pydantic Models
 class CustomerCreate(BaseModel):

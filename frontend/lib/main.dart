@@ -12,8 +12,8 @@ class TailorCMS extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => ScreenState(),
+    return MultiProvider(
+      providers: [ChangeNotifierProvider(create: (context) => ScreenState())],
       child: MaterialApp(
         title: 'Tailor CMS',
         theme: ThemeData(

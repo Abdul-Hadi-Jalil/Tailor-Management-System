@@ -45,20 +45,34 @@ class MainScreen extends StatelessWidget {
       builder: (context, screenState, _) {
         return Scaffold(
           appBar: AppBar(
-            title: const Text('Tailor CMS'),
+            backgroundColor: Colors.blue[800],
+            title: Row(
+              children: [
+                Icon(Icons.restaurant, color: Colors.white, size: 28),
+                const SizedBox(width: 12),
+                const Text(
+                  'Tailor CMS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
             actions: [
               AppbarButton(text: 'Add Customer'),
-              SizedBox(width: 4),
-              AppbarButton(text: 'Add Measurement'),
-              SizedBox(width: 4),
-              AppbarButton(text: 'Add Order'),
-              SizedBox(width: 4),
+              const SizedBox(width: 12),
+              AppbarButton(text: 'Search'),
+              const SizedBox(width: 12),
+              AppbarButton(text: 'Orders'),
+              const SizedBox(width: 12),
               AppbarButton(text: 'All Orders'),
-              SizedBox(width: 4),
-              AppbarButton(text: 'Search Customer'),
-              SizedBox(width: 4),
+              const SizedBox(width: 12),
+              AppbarButton(text: 'Measurements'),
+              const SizedBox(width: 12),
               AppbarButton(text: 'Reports'),
-              SizedBox(width: 50),
+              const SizedBox(width: 24),
             ],
           ),
           body: _buildBody(screenState.currentScreen),

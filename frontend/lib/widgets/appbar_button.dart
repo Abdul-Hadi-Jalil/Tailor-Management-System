@@ -10,14 +10,14 @@ class AppbarButton extends StatelessWidget {
     switch (buttonText) {
       case 'Add Customer':
         return 'addCustomer';
-      case 'Add Measurement':
-        return 'addMeasurement';
-      case 'Add Order':
+      case 'Search':
+        return 'searchCustomer';
+      case 'Orders':
         return 'addOrder';
       case 'All Orders':
         return 'showOrders';
-      case 'Search Customer':
-        return 'searchCustomer';
+      case 'Measurements':
+        return 'addMeasurement';
       case 'Reports':
         return 'generateReport';
       default:
@@ -28,11 +28,20 @@ class AppbarButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: Colors.blue[700],
+        foregroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
       onPressed: () {
         final screenState = context.read<ScreenState>();
         screenState.changeScreen(_getScreenName(text));
       },
-      child: Text(text),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+      ),
     );
   }
 }
